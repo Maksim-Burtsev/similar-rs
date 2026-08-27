@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Action pins in .github/workflows/wheels.yml. Grouped so a week's worth of
+  # bumps arrives as one PR instead of four.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # pyo3 and similar. Monthly: every bump costs a full five-platform wheel
+  # build, and neither crate moves fast.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "build"
