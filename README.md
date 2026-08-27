@@ -104,7 +104,7 @@ four versions later (v3.9.0 to v3.13.0) — real edits to real code, roughly
 |---|---|
 | `unified_diff`, native (`similar.unified_diff`) | 2.6x |
 | `unified_diff`, difflib-shaped (`similar.difflib.unified_diff`) | 2.2x |
-| `SequenceMatcher.ratio` vs stdlib's default | 2.8x |
+| `SequenceMatcher.ratio` vs stdlib's default (not like-for-like, see below) | 2.8x |
 | `get_close_matches` (aggregate over the query set) | 2.3x |
 
 A few honest caveats, all of them measured:
@@ -119,6 +119,11 @@ A few honest caveats, all of them measured:
   set (a lower ratio) for the lower price. Against stdlib with `autojunk=False`
   — the algorithmically comparable setting — one pair finished in 23.4 s
   against our 0.12 s, and the other four had to be aborted at 30 s.
+  Read that row as "different answer, different price", not as a win — the
+  `unified_diff` numbers are the ones that survive scrutiny. If you want the
+  answer rather than the speed, name a thorough algorithm: on that same pair
+  `algorithm="raw-myers"` scored 0.783 against stdlib's own 0.759 (its
+  `autojunk=False` result) and still took 0.5 s rather than 23 s.
 - On inputs too small to contain work (two lines, a pair of words) the win is
   1.3x to 6.6x, which is the call overhead and nothing else.
 
