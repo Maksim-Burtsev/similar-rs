@@ -68,7 +68,8 @@ class SequenceMatcher:
     `autojunk` is ignored silently, sequences must be str or sequences of str,
     ratios and opcodes may differ from stdlib's (a different algorithm picks a
     different, usually no smaller, set of matches), and `find_longest_match`
-    raises NotImplementedError.
+    is delegated to stdlib (so it too ignores junk, running with
+    autojunk=False).
     """
 
     def __init__(self, isjunk=None, a="", b="", autojunk=True, *, algorithm="myers"):
@@ -105,10 +106,10 @@ class SequenceMatcher:
         self.fullbcount = None
 
     def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None):
-        raise NotImplementedError(
-            "similar-rs does not implement find_longest_match; "
-            "use stdlib difflib for this"
-        )
+        """Find longest matching block in a[alo:ahi] and b[blo:bhi] (via stdlib)."""
+        return _stdlib.SequenceMatcher(
+            None, self.a, self.b, autojunk=False
+        ).find_longest_match(alo, ahi, blo, bhi)
 
     def get_opcodes(self):
         """Return a list of (tag, i1, i2, j1, j2) tuples covering both inputs."""

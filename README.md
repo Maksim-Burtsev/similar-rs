@@ -61,7 +61,7 @@ difflib.SequenceMatcher(None, "kitten", "sitting").ratio()  # 0.6153...
 | `SequenceMatcher.get_opcodes`, `get_matching_blocks`, `get_grouped_opcodes` | Rust |
 | `unified_diff`, `get_close_matches` | Rust |
 | `Differ`, `HtmlDiff`, `ndiff`, `context_diff`, `restore`, `diff_bytes` | stdlib passthrough |
-| `SequenceMatcher.find_longest_match` | `NotImplementedError` |
+| `SequenceMatcher.find_longest_match` | stdlib passthrough |
 
 Known differences:
 

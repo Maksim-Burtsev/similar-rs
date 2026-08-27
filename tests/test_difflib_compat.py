@@ -348,7 +348,7 @@ def test_unified_diff_accepts_userlist():
     assert list(ours.unified_diff(a, b)) == list(stdlib.unified_diff(a, b))
 
 
-# --- junk arguments and unsupported methods -------------------------------
+# --- junk arguments and stdlib delegation ---------------------------------
 
 
 def test_isjunk_warns():
@@ -362,9 +362,22 @@ def test_autojunk_silent(recwarn, autojunk):
     assert not recwarn.list
 
 
-def test_find_longest_match_not_implemented():
-    with pytest.raises(NotImplementedError):
-        ours.SequenceMatcher(a="abc", b="abd").find_longest_match()
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        ("abxcd", "abycd"),
+        ("", ""),
+        ("abc", ""),
+        (["a\n", "b\n", "c\n"], ["x\n", "b\n", "c\n"]),
+    ],
+)
+def test_find_longest_match_matches_stdlib(a, b):
+    la, lb = len(a), len(b)
+    for args in [(), (0, None, 0, None), (0, la, 0, lb), (1, la, 0, max(lb - 1, 0))]:
+        expected = stdlib.SequenceMatcher(
+            None, a, b, autojunk=False
+        ).find_longest_match(*args)
+        assert ours.SequenceMatcher(a=a, b=b).find_longest_match(*args) == expected
 
 
 # --- re-exports -----------------------------------------------------------
