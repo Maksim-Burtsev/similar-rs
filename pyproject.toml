@@ -43,6 +43,7 @@ Issues = "https://github.com/Maksim-Burtsev/similar-rs/issues"
 
 [project.optional-dependencies]
 test = ["pytest", "hypothesis"]
+bench = ["matplotlib"]
 
 [tool.maturin]
 python-source = "python"
