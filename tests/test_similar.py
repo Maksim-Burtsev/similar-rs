@@ -112,6 +112,14 @@ def test_identical_inputs_are_one_equal_op():
 
 def test_known_ratio():
     assert TextDiff("a\nb\n", "a\nc\n").ratio() == 0.5
+    assert TextDiff("kitten", "sitting", granularity="chars").ratio() == (
+        0.6153846153846154
+    )
+
+
+def test_lone_surrogates_raise():
+    with pytest.raises(UnicodeEncodeError):
+        TextDiff("\ud800x", "x")
 
 
 def test_unknown_granularity():

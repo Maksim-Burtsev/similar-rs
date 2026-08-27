@@ -9,7 +9,11 @@ _GRANULARITIES = ("lines", "words", "chars")
 
 
 class TextDiff:
-    """A diff between two texts, computed once at construction."""
+    """A diff between two texts, computed once at construction.
+
+    Text holding lone surrogates raises UnicodeEncodeError: it cannot cross
+    into Rust. Use `similar.difflib.SequenceMatcher`, which falls back.
+    """
 
     def __init__(self, old, new, *, algorithm="myers", granularity="lines"):
         if granularity not in _GRANULARITIES:

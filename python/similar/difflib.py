@@ -5,8 +5,10 @@ Everything else is re-exported from the standard library unchanged.
 """
 
 import warnings
+from collections.abc import Sequence
 
-# Absolute import from a submodule of `similar`: this is the stdlib difflib.
+# Absolute imports from a submodule of `similar`: this is the stdlib difflib.
+import difflib as _stdlib
 from difflib import (
     IS_CHARACTER_JUNK,
     IS_LINE_JUNK,
@@ -48,8 +50,10 @@ _UNSET = object()  # so that set_seq*(None) is validated, not skipped as "unchan
 
 
 def _check_seq(x):
+    # Any Sequence of str, not just list/tuple: UserList and friends qualify.
+    # Non-sequences (generators, iterators) do not — stdlib needs len() too.
     if isinstance(x, str) or (
-        isinstance(x, (list, tuple)) and all(isinstance(e, str) for e in x)
+        isinstance(x, Sequence) and all(isinstance(e, str) for e in x)
     ):
         return
     raise TypeError(
@@ -62,13 +66,15 @@ class SequenceMatcher:
 
     Differences from stdlib: `isjunk` is ignored (a RuntimeWarning is raised),
     `autojunk` is ignored silently, sequences must be str or sequences of str,
-    and `find_longest_match` raises NotImplementedError.
+    ratios and opcodes may differ from stdlib's (a different algorithm picks a
+    different, usually no smaller, set of matches), and `find_longest_match`
+    raises NotImplementedError.
     """
 
     def __init__(self, isjunk=None, a="", b="", autojunk=True, *, algorithm="myers"):
         if isjunk is not None:
             warnings.warn(
-                "similar-rs ignores isjunk; results match SequenceMatcher(autojunk=False)",
+                "similar-rs ignores isjunk; ratios and opcodes may differ from stdlib's",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -108,10 +114,17 @@ class SequenceMatcher:
         """Return a list of (tag, i1, i2, j1, j2) tuples covering both inputs."""
         if self._opcodes is None:
             a, b = self.a, self.b
-            if isinstance(a, str) and isinstance(b, str):
-                self._opcodes = opcodes_str("chars", a, b, self._algorithm)
-            else:
-                self._opcodes = opcodes_seq(list(a), list(b), self._algorithm)
+            try:
+                if isinstance(a, str) and isinstance(b, str):
+                    self._opcodes = opcodes_str("chars", a, b, self._algorithm)
+                else:
+                    self._opcodes = opcodes_seq(list(a), list(b), self._algorithm)
+            except UnicodeEncodeError:
+                # Lone surrogates cannot become Rust Strings. Rare enough that
+                # the slow, correct stdlib path is a fine answer.
+                self._opcodes = _stdlib.SequenceMatcher(
+                    None, a, b, autojunk=False
+                ).get_opcodes()
         return self._opcodes
 
     def get_matching_blocks(self):
@@ -191,7 +204,12 @@ def get_close_matches(word, possibilities, n=3, cutoff=0.6):
         raise ValueError("n must be > 0: %r" % (n,))
     if not 0.0 <= cutoff <= 1.0:
         raise ValueError("cutoff must be in [0.0, 1.0]: %r" % (cutoff,))
-    return _gcm(word, list(possibilities), n, cutoff)
+    possibilities = list(possibilities)
+    try:
+        return _gcm(word, possibilities, n, cutoff)
+    except UnicodeEncodeError:
+        # Lone surrogates cannot become Rust Strings; fall back to stdlib.
+        return _stdlib.get_close_matches(word, possibilities, n, cutoff)
 
 
 def _check_types(a, b, *args):

@@ -1,5 +1,7 @@
 """Type boundaries: only str and sequences of str are accepted."""
 
+from collections import UserList
+
 import pytest
 
 from similar import TextDiff
@@ -36,6 +38,16 @@ def test_set_seq2_rejects(bad):
 
 def test_sequence_matcher_accepts_tuple_of_str():
     assert ours.SequenceMatcher(a=("a", "b"), b=("a", "c")).ratio() == 0.5
+
+
+def test_sequence_matcher_accepts_any_sequence_of_str():
+    assert ours.SequenceMatcher(a=UserList(["a", "b"]), b=("a", "c")).ratio() == 0.5
+
+
+def test_sequence_matcher_rejects_generator():
+    # stdlib needs len() too, so an iterator is no more supported than there.
+    with pytest.raises(TypeError, match="only str or sequences of str"):
+        ours.SequenceMatcher(a=(c for c in "ab"), b="ok")
 
 
 def test_unified_diff_rejects_non_str_filename():

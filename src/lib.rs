@@ -131,8 +131,14 @@ fn get_close_matches(
                 (ratio >= cutoff).then_some((ratio, cand))
             })
             .collect();
-        // Stable sort: ties keep input order, matching heapq.nlargest in difflib.
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).expect("ratios are never NaN"));
+        // difflib does heapq.nlargest(n, [(ratio, x), ...]), so equal ratios break
+        // on the candidate itself, larger first. Rust compares Strings byte-wise
+        // over UTF-8, which orders identically to Python's code-point compare.
+        scored.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .expect("ratios are never NaN")
+                .then_with(|| b.1.cmp(&a.1))
+        });
         scored.into_iter().take(n).map(|(_, cand)| cand).collect()
     })
 }

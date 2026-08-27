@@ -43,7 +43,8 @@ d.ratio()  # 0.5
 
 ### difflib drop-in
 
-Change one import line and the diffing runs in Rust:
+Change one import line — `SequenceMatcher`, `unified_diff` and
+`get_close_matches` then run on Rust:
 
 ```python
 from similar import difflib  # instead of: import difflib
@@ -64,12 +65,19 @@ difflib.SequenceMatcher(None, "kitten", "sitting").ratio()  # 0.6153...
 
 Known differences:
 
-- `isjunk` is ignored; passing one raises a `RuntimeWarning`.
-- `autojunk` is ignored: results always match `autojunk=False`.
-- Inputs must be `str` or sequences of `str`.
+- `isjunk` and `autojunk` are ignored; passing an `isjunk` raises a
+  `RuntimeWarning`.
 - Opcodes are a valid edit script, but not byte-for-byte the one stdlib
-  produces — it is a different algorithm. `ratio()` can therefore differ
-  from stdlib's on inputs with several equally good alignments.
+  produces — it is a different algorithm, finding a different (as a rule, no
+  smaller) set of matches. `ratio()` and `get_opcodes()` can therefore differ
+  from stdlib's at *either* `autojunk` setting, not just `autojunk=True`.
+- `get_close_matches` can return a different set for the same reason: the
+  underlying ratios differ. The tie order among equal ratios matches stdlib.
+- Inputs must be `str` or sequences of `str`.
+- The stdlib instance attributes `b2j`, `bjunk`, `bpopular`, `opcodes` and
+  `matching_blocks` are absent; the caches are private.
+- Strings holding lone surrogates (as `diff_bytes` produces) cannot cross into
+  Rust, so they take a slow pure-Python fallback via stdlib `difflib`.
 
 ## Limitations
 
@@ -96,4 +104,6 @@ pytest
 Apache-2.0 (see [LICENSE](LICENSE)). The difflib-compatible formatting code
 in `python/similar/difflib.py` is derived from CPython's `difflib` and is
 covered by the PSF License Version 2; see the notice at the end of
-[LICENSE](LICENSE).
+[LICENSE](LICENSE). The wheel statically links the Rust crates it is built
+from; their licenses are collected in
+[LICENSE-THIRD-PARTY](LICENSE-THIRD-PARTY), which ships inside the wheel.

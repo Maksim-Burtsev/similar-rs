@@ -2,6 +2,7 @@
 
 import difflib as stdlib
 import re
+from collections import UserList
 
 import pytest
 from hypothesis import given
@@ -73,6 +74,31 @@ def test_opcodes_identical_is_single_equal(a):
     assert codes == ([("equal", 0, len(a), 0, len(a))] if a else [])
 
 
+def test_algorithm_reaches_the_backend():
+    # 'ab' vs 'baa' is a minimal input where myers and patience disagree.
+    myers = ours.SequenceMatcher(a="ab", b="baa", algorithm="myers").get_opcodes()
+    patience = ours.SequenceMatcher(a="ab", b="baa", algorithm="patience").get_opcodes()
+    check_opcodes("ab", "baa", myers)
+    check_opcodes("ab", "baa", patience)
+    assert myers != patience
+
+
+def test_unknown_algorithm_rejected():
+    with pytest.raises(ValueError):
+        ours.SequenceMatcher(a="x", b="y", algorithm="bogus").get_opcodes()
+
+
+@pytest.mark.parametrize("setter", ["set_seq1", "set_seq2"])
+def test_set_seq_invalidates_materialised_caches(setter):
+    m = ours.SequenceMatcher(a=list("abc"), b=list("abc"))
+    assert m.get_opcodes() and m.ratio() == 1.0 and m.quick_ratio() == 1.0
+    getattr(m, setter)(list("xyz"))
+    assert m.ratio() == 0.0
+    assert m.quick_ratio() == 0.0
+    assert m.get_opcodes() != [("equal", 0, 3, 0, 3)]
+    assert m.get_matching_blocks() == [stdlib.Match(3, 3, 0)]
+
+
 def test_grouped_opcodes_does_not_corrupt_cache():
     m = ours.SequenceMatcher(a=list("abcdefghij"), b=list("abcdefghij"))
     codes = list(m.get_opcodes())
@@ -106,6 +132,13 @@ def test_ratio_matches_own_opcodes(a, b):
     matches = sum(i2 - i1 for tag, i1, i2, _, _ in codes if tag == "equal")
     assert m.ratio() == (2.0 * matches / total if total else 1.0)
     assert 0.0 <= m.ratio() <= 1.0
+
+
+def test_known_ratio():
+    assert ours.SequenceMatcher(None, "kitten", "sitting").ratio() == 0.6153846153846154
+    assert stdlib.SequenceMatcher(None, "kitten", "sitting").ratio() == (
+        ours.SequenceMatcher(None, "kitten", "sitting").ratio()
+    )
 
 
 @given(seqs)
@@ -151,9 +184,11 @@ def apply_unified(a, diff):
             continue
         tag, text = line[0], line[1:]
         if tag == " ":
+            assert text == a[pos]
             out.append(a[pos])
             pos += 1
         elif tag == "-":
+            assert text == a[pos]
             pos += 1
         else:
             out.append(text)
@@ -227,6 +262,13 @@ def test_get_close_matches_properties(word, possibilities, n, cutoff):
     assert ratios == sorted(ratios, reverse=True)
 
 
+def test_get_close_matches_tie_break_matches_stdlib():
+    # Equal ratios: difflib's heapq.nlargest compares the strings, larger wins.
+    args = ("ab", ["ax", "ay", "az"], 2, 0.0)
+    assert ours.get_close_matches(*args) == ["az", "ay"]
+    assert ours.get_close_matches(*args) == stdlib.get_close_matches(*args)
+
+
 @pytest.mark.parametrize("kw,msg", [({"n": 0}, "n must be"), ({"cutoff": 1.5}, "cutoff")])
 def test_get_close_matches_validation(kw, msg):
     with pytest.raises(ValueError) as ours_exc:
@@ -234,6 +276,43 @@ def test_get_close_matches_validation(kw, msg):
     with pytest.raises(ValueError) as std_exc:
         stdlib.get_close_matches("a", ["b"], **kw)
     assert str(ours_exc.value) == str(std_exc.value)
+
+
+# --- lone surrogates fall back to stdlib -----------------------------------
+
+
+def test_sequence_matcher_handles_lone_surrogates():
+    codes = ours.SequenceMatcher(None, "\ud800x", "x").get_opcodes()
+    check_opcodes("\ud800x", "x", codes)
+    assert codes == stdlib.SequenceMatcher(None, "\ud800x", "x").get_opcodes()
+
+
+def test_get_close_matches_handles_lone_surrogates():
+    args = ("\ud800a", ["\ud800b", "zz"], 3, 0.0)
+    assert ours.get_close_matches(*args) == stdlib.get_close_matches(*args)
+
+
+def test_diff_bytes_handles_non_ascii():
+    # diff_bytes decodes with surrogateescape, so \xe9 arrives as a surrogate.
+    got = list(ours.diff_bytes(ours.unified_diff, [b"caf\xe9\n"], [b"cafe\n"], b"f", b"t"))
+    assert got == list(
+        stdlib.diff_bytes(stdlib.unified_diff, [b"caf\xe9\n"], [b"cafe\n"], b"f", b"t")
+    )
+
+
+# --- arbitrary sequences of str --------------------------------------------
+
+
+def test_sequence_matcher_accepts_userlist():
+    m = ours.SequenceMatcher(None, UserList(["a\n", "b\n"]), UserList(["a\n", "c\n"]))
+    assert m.ratio() == 0.5
+    assert m.quick_ratio() == 0.5
+    check_opcodes(list(m.a), list(m.b), m.get_opcodes())
+
+
+def test_unified_diff_accepts_userlist():
+    a, b = UserList(["a\n", "b\n"]), UserList(["a\n", "c\n"])
+    assert list(ours.unified_diff(a, b)) == list(stdlib.unified_diff(a, b))
 
 
 # --- junk arguments and unsupported methods -------------------------------

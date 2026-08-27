@@ -8,6 +8,7 @@ requires-python = ">=3.9"
 description = "Rust-powered text diffing for Python: a fast drop-in replacement for difflib, powered by the similar crate"
 readme = "README.md"
 license = "Apache-2.0"
+license-files = ["LICENSE", "LICENSE-THIRD-PARTY"]
 authors = [{ name = "Maksim Burtsev", email = "mburtsev17@gmail.com" }]
 keywords = [
     "diff",
