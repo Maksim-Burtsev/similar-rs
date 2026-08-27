@@ -2,6 +2,9 @@
 
 from typing import Sequence
 
+__debug_build__: bool
+"""True when the extension was built without optimizations (~5x slower)."""
+
 Opcode = tuple[str, int, int, int, int]
 """A single edit op: (tag, i1, i2, j1, j2), tag in equal/delete/insert/replace."""
 

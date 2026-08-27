@@ -265,6 +265,10 @@ def main() -> None:
     args = ap.parse_args()
     out_dir = Path(args.out)
 
+    if getattr(similar._similar, "__debug_build__", False):
+        sys.exit("this is a DEBUG build (~5x slower); benchmarking it is "
+                 "meaningless. Reinstall with: pip install -e '.[bench]'")
+
     corpus = load_corpus(out_dir / "corpus")
     if not corpus:
         sys.exit("no corpus: every pair failed to download")
