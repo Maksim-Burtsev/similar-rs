@@ -7,7 +7,9 @@
 
 Rust-powered text diffing for Python: bindings to the
 [`similar`](https://github.com/mitsuhiko/similar) crate by Armin Ronacher.
-It also ships a drop-in replacement for the standard library's `difflib`.
+It also ships a drop-in replacement for the standard library's `difflib`,
+which runs [2 to 4 times faster](#benchmarks) on real file diffs and adds
+six diff algorithms stdlib does not have.
 
 ## Install
 
@@ -90,8 +92,37 @@ Unicode-word granularity yet. Open an issue if you need any of these.
 
 ## Benchmarks
 
-Coming soon; the goal of this project is to be a much faster drop-in for
-`difflib` on large inputs.
+Five CPython standard-library modules, each diffed against its own release
+four versions later (v3.9.0 to v3.13.0) — real edits to real code, roughly
+1000 to 3800 lines a side:
+
+![unified_diff timings and median speedups](https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/f720068/benchmarks/speedup.svg)
+
+| operation | median speedup |
+|---|---|
+| `unified_diff`, native (`similar.unified_diff`) | 2.4x |
+| `unified_diff`, difflib-shaped (`similar.difflib.unified_diff`) | 2.1x |
+| `SequenceMatcher.ratio` vs stdlib's default | 2.8x |
+| `get_close_matches` | 2.4x |
+
+A few honest caveats, all of them measured:
+
+- **Two to four times, not two orders of magnitude.** stdlib `difflib` is
+  pure Python but it is not naive, and the per-pair speedup ranged from 1.0x
+  to 4.0x. The win comes from the diff itself, so it grows with how much of
+  the file actually changed.
+- `ratio()` on whole files at character level is the one case where the
+  numbers are not like-for-like: stdlib's `autojunk` is a *speed* heuristic,
+  and our Myers has a cost cut-off of its own, so we return a coarser match
+  set (a lower ratio) for the lower price. Against stdlib with `autojunk=False`
+  — the algorithmically comparable setting — one pair finished in 23.5 s
+  against our 0.12 s, and the other four had to be aborted at 30 s.
+- On inputs too small to contain work (two lines, a pair of words) the win is
+  1.3x to 6.3x, which is the call overhead and nothing else.
+
+[`benchmarks/results.md`](benchmarks/results.md) has the per-pair tables and
+the exact method; `python benchmarks/bench.py` reproduces all of it,
+including the chart. Numbers above are from one Apple M4, Python 3.13.
 
 ## Contributing
 
