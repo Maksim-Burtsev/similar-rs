@@ -19,6 +19,7 @@ from difflib import (
     restore,
 )
 
+from similar._similar import get_close_matches as _gcm
 from similar._similar import opcodes_seq, opcodes_str
 
 __all__ = [
@@ -179,6 +180,15 @@ class SequenceMatcher:
         """Return an upper bound on ratio() very quickly."""
         la, lb = len(self.a), len(self.b)
         return _calculate_ratio(min(la, lb), la + lb)
+
+
+def get_close_matches(word, possibilities, n=3, cutoff=0.6):
+    """Return the best `n` close matches to `word` from `possibilities`."""
+    if not n > 0:
+        raise ValueError("n must be > 0: %r" % (n,))
+    if not 0.0 <= cutoff <= 1.0:
+        raise ValueError("cutoff must be in [0.0, 1.0]: %r" % (cutoff,))
+    return _gcm(word, list(possibilities), n, cutoff)
 
 
 def _check_types(a, b, *args):

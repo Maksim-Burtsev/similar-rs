@@ -99,11 +99,50 @@ fn opcodes_seq(
     }))
 }
 
+/// Return the best `n` of `possibilities` scoring at least `cutoff`, by char ratio.
+#[pyfunction]
+#[pyo3(signature = (word, possibilities, n=3, cutoff=0.6))]
+fn get_close_matches(
+    py: Python<'_>,
+    word: String,
+    possibilities: Vec<String>,
+    n: usize,
+    cutoff: f64,
+) -> Vec<String> {
+    py.detach(|| {
+        let w: Vec<char> = word.chars().collect();
+        let mut scored: Vec<(f64, String)> = possibilities
+            .into_iter()
+            .filter_map(|cand| {
+                let c: Vec<char> = cand.chars().collect();
+                let total = w.len() + c.len();
+                let ratio = if total == 0 {
+                    1.0
+                } else {
+                    let matches: usize = similar::capture_diff_slices(Algorithm::Myers, &w, &c)
+                        .iter()
+                        .filter_map(|op| match op.as_tag_tuple() {
+                            (DiffTag::Equal, r, _) => Some(r.len()),
+                            _ => None,
+                        })
+                        .sum();
+                    2.0 * matches as f64 / total as f64
+                };
+                (ratio >= cutoff).then_some((ratio, cand))
+            })
+            .collect();
+        // Stable sort: ties keep input order, matching heapq.nlargest in difflib.
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).expect("ratios are never NaN"));
+        scored.into_iter().take(n).map(|(_, cand)| cand).collect()
+    })
+}
+
 #[pymodule]
 fn _similar(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__doc__", "Rust bindings to the `similar` diffing crate.")?;
     m.add_function(wrap_pyfunction!(unified_diff, m)?)?;
     m.add_function(wrap_pyfunction!(opcodes_str, m)?)?;
     m.add_function(wrap_pyfunction!(opcodes_seq, m)?)?;
+    m.add_function(wrap_pyfunction!(get_close_matches, m)?)?;
     Ok(())
 }
