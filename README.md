@@ -8,7 +8,9 @@
 Rust-powered text diffing for Python: bindings to the
 [`similar`](https://github.com/mitsuhiko/similar) crate by Armin Ronacher.
 It also ships a drop-in replacement for the standard library's `difflib`,
-which runs [2 to 4 times faster](#benchmarks) on real file diffs and adds
+which runs [2 to 4 times
+faster](https://github.com/Maksim-Burtsev/similar-rs#benchmarks) on real
+file diffs and adds
 six diff algorithms stdlib does not have.
 
 ## Install
@@ -96,14 +98,14 @@ Five CPython standard-library modules, each diffed against its own release
 four versions later (v3.9.0 to v3.13.0) — real edits to real code, roughly
 1000 to 3800 lines a side:
 
-![unified_diff timings and median speedups](https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/99d55e2/benchmarks/speedup.svg)
+![unified_diff timings and speedups](https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/e578f1c/benchmarks/speedup.svg)
 
-| operation | median speedup |
+| operation | speedup (median of the five pairs) |
 |---|---|
 | `unified_diff`, native (`similar.unified_diff`) | 2.6x |
 | `unified_diff`, difflib-shaped (`similar.difflib.unified_diff`) | 2.2x |
 | `SequenceMatcher.ratio` vs stdlib's default | 2.8x |
-| `get_close_matches` | 2.4x |
+| `get_close_matches` (aggregate over the query set) | 2.3x |
 
 A few honest caveats, all of them measured:
 
@@ -115,13 +117,13 @@ A few honest caveats, all of them measured:
   numbers are not like-for-like: stdlib's `autojunk` is a *speed* heuristic,
   and our Myers has a cost cut-off of its own, so we return a coarser match
   set (a lower ratio) for the lower price. Against stdlib with `autojunk=False`
-  — the algorithmically comparable setting — one pair finished in 23.6 s
+  — the algorithmically comparable setting — one pair finished in 23.4 s
   against our 0.12 s, and the other four had to be aborted at 30 s.
 - On inputs too small to contain work (two lines, a pair of words) the win is
-  1.3x to 6.3x, which is the call overhead and nothing else.
+  1.3x to 6.6x, which is the call overhead and nothing else.
 
-[`benchmarks/results.md`](benchmarks/results.md) has the per-pair tables and
-the exact method; `python benchmarks/bench.py` reproduces all of it,
+[`benchmarks/results.md`](https://github.com/Maksim-Burtsev/similar-rs/blob/master/benchmarks/results.md)
+has the per-pair tables and the exact method; `python benchmarks/bench.py` reproduces all of it,
 including the chart. Numbers above are from one Apple M4, Python 3.13.
 
 ## Contributing

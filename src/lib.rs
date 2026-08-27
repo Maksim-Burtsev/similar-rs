@@ -172,6 +172,7 @@ fn get_close_matches(
 #[pymodule]
 fn _similar(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__doc__", "Rust bindings to the `similar` diffing crate.")?;
+    m.add("__debug_build__", cfg!(debug_assertions))?;
     m.add_function(wrap_pyfunction!(unified_diff, m)?)?;
     m.add_function(wrap_pyfunction!(opcodes_str, m)?)?;
     m.add_function(wrap_pyfunction!(opcodes_seq, m)?)?;

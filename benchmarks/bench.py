@@ -239,8 +239,8 @@ def plot(rows, medians, out_svg: Path) -> None:
     bx.axhline(1, color="#adb5bd", lw=1.2, zorder=2)
     bx.set_xticks(range(len(names)))
     bx.set_xticklabels(names, fontsize=8.5)
-    bx.set_ylabel("median speedup (x)")
-    bx.set_title("median speedup over the corpus", fontsize=12, pad=10)
+    bx.set_ylabel("speedup (x)")
+    bx.set_title("speedup over the corpus", fontsize=12, pad=10)
     for b, v in zip(bars, vals):
         bx.text(b.get_x() + b.get_width() / 2, v, f"{v:.1f}x", ha="center",
                 va="bottom", fontsize=9)
@@ -260,10 +260,14 @@ def fmt_ms(v):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path(__file__).parent))
-    ap.add_argument("--slow-cap", type=float, default=900.0,
+    ap.add_argument("--slow-cap", type=float, default=30.0,
                     help="abort a stdlib autojunk=False ratio run after N seconds")
     args = ap.parse_args()
     out_dir = Path(args.out)
+
+    if getattr(similar._similar, "__debug_build__", False):
+        sys.exit("this is a DEBUG build (~5x slower); benchmarking it is "
+                 "meaningless. Reinstall with: pip install -e '.[bench]'")
 
     corpus = load_corpus(out_dir / "corpus")
     if not corpus:
@@ -307,12 +311,13 @@ def main() -> None:
     m_rust = med([r["ud_std"] / r["ud_rust"] for r in rows])
     m_aj = med([r["r_aj"] / r["r_ours"] for r in rows])
     m_gcm = g_std / g_ours
-    # Every median here is over the whole corpus, so they are comparable and the
-    # chart can put them side by side.
+    # The first three are medians over the corpus. The last one is not: the
+    # queries are timed as one batch, so it is a single aggregate ratio.
     medians = [("unified_diff\n(similar.difflib)", m_ud, ""),
                ("unified_diff\n(native)", m_rust, ""),
                ("ratio\nvs autojunk=True", m_aj, ""),
-               ("get_close_matches", m_gcm, "")]
+               ("get_close_matches\n(whole query set)", m_gcm,
+                " (aggregate over the whole query set, not a median)")]
     # autojunk=False is not: most pairs were aborted, so it is reported with the
     # sample it actually rests on and kept out of the chart.
     noaj = [r["r_noaj"] / r["r_ours"] for r in rows if r["r_noaj"]]
@@ -441,7 +446,8 @@ def write_report(path, rows, medians, g_ours, g_std, hits, nq, nc,
         "```",
         "pip install -e '.[bench]'   # release build; `maturin develop` alone is",
         "                            # a DEBUG build and is ~5x slower",
-        "python benchmarks/bench.py",
+        "python benchmarks/bench.py" + (
+            "" if not sys.argv[1:] else " " + " ".join(sys.argv[1:])),
         "```",
         "",
         f"The corpus is cached in `benchmarks/corpus/` (git-ignored) and downloaded "

@@ -270,6 +270,10 @@ def test_get_close_matches_tie_break_matches_stdlib():
     assert ours.get_close_matches(*args) == stdlib.get_close_matches(*args)
 
 
+# ASCII, 2-byte, 3-byte and astral 4-byte: char offsets are not byte offsets.
+MIXED_WIDTH = "abcd\u00e9\u6f22\U0001d518"
+
+
 def _scored_by_brute_force(word, possibilities, n, cutoff):
     scored = [
         (ours.SequenceMatcher(a=cand, b=word).ratio(), cand) for cand in possibilities
@@ -278,8 +282,8 @@ def _scored_by_brute_force(word, possibilities, n, cutoff):
 
 
 @given(
-    st.text(alphabet="abcde", max_size=6),
-    st.lists(st.text(alphabet="abcde", max_size=6), max_size=8),
+    st.text(alphabet=MIXED_WIDTH, max_size=6),
+    st.lists(st.text(alphabet=MIXED_WIDTH, max_size=6), max_size=8),
     st.integers(min_value=1, max_value=4),
     st.floats(min_value=0.0, max_value=1.0),
 )
@@ -291,7 +295,10 @@ def test_get_close_matches_skips_only_hopeless_candidates(word, possibilities, n
     )
 
 
-@given(st.text(alphabet="abcde", max_size=12), st.text(alphabet="abcde", max_size=12))
+@given(
+    st.text(alphabet=MIXED_WIDTH, max_size=12),
+    st.text(alphabet=MIXED_WIDTH, max_size=12),
+)
 def test_cheap_ratio_bounds_never_undercut_the_real_ratio(a, b):
     # The bounds those skips rest on: neither may ever fall below ratio().
     total = len(a) + len(b)
