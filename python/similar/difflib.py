@@ -69,7 +69,9 @@ class SequenceMatcher:
     ratios and opcodes may differ from stdlib's (a different algorithm picks a
     different, usually no smaller, set of matches), and `find_longest_match`
     is delegated to stdlib (so it too ignores junk, running with
-    autojunk=False).
+    autojunk=False). Because the algorithms differ, `find_longest_match` may
+    name a block that `get_matching_blocks` of the same object does not
+    contain.
     """
 
     def __init__(self, isjunk=None, a="", b="", autojunk=True, *, algorithm="myers"):
@@ -94,7 +96,7 @@ class SequenceMatcher:
             return
         _check_seq(a)
         self.a = a
-        self._opcodes = self._matching_blocks = None
+        self._opcodes = self._matching_blocks = self._fallback = None
 
     def set_seq2(self, b):
         """Set the second sequence to be compared."""
@@ -102,14 +104,16 @@ class SequenceMatcher:
             return
         _check_seq(b)
         self.b = b
-        self._opcodes = self._matching_blocks = None
+        self._opcodes = self._matching_blocks = self._fallback = None
         self.fullbcount = None
 
     def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None):
         """Find longest matching block in a[alo:ahi] and b[blo:bhi] (via stdlib)."""
-        return _stdlib.SequenceMatcher(
-            None, self.a, self.b, autojunk=False
-        ).find_longest_match(alo, ahi, blo, bhi)
+        if self._fallback is None:
+            self._fallback = _stdlib.SequenceMatcher(
+                None, self.a, self.b, autojunk=False
+            )
+        return self._fallback.find_longest_match(alo, ahi, blo, bhi)
 
     def get_opcodes(self):
         """Return a list of (tag, i1, i2, j1, j2) tuples covering both inputs."""

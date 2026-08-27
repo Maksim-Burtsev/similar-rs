@@ -369,6 +369,12 @@ def test_autojunk_silent(recwarn, autojunk):
         ("", ""),
         ("abc", ""),
         (["a\n", "b\n", "c\n"], ["x\n", "b\n", "c\n"]),
+        # len(b) >= 200 with popular elements: autojunk=True would purge them
+        # and pick a different block, pinning the documented autojunk=False.
+        (
+            ["p\n"] * 50 + ["u1\n", "u2\n", "u3\n"],
+            ["z\n"] * 100 + ["p\n"] * 150 + ["q\n", "u1\n", "u2\n", "u3\n"],
+        ),
     ],
 )
 def test_find_longest_match_matches_stdlib(a, b):
@@ -378,6 +384,20 @@ def test_find_longest_match_matches_stdlib(a, b):
             None, a, b, autojunk=False
         ).find_longest_match(*args)
         assert ours.SequenceMatcher(a=a, b=b).find_longest_match(*args) == expected
+    kwargs = dict(alo=0, ahi=la, blo=0, bhi=lb)
+    expected = stdlib.SequenceMatcher(None, a, b, autojunk=False).find_longest_match(
+        **kwargs
+    )
+    assert ours.SequenceMatcher(a=a, b=b).find_longest_match(**kwargs) == expected
+
+
+def test_find_longest_match_after_set_seqs():
+    sm = ours.SequenceMatcher(a="abcd", b="abcd")
+    assert sm.find_longest_match() == stdlib.Match(0, 0, 4)
+    sm.set_seq2("zzcd")
+    assert sm.find_longest_match() == stdlib.Match(2, 2, 2)
+    sm.set_seq1("zzzd")
+    assert sm.find_longest_match() == stdlib.Match(0, 0, 2)
 
 
 # --- re-exports -----------------------------------------------------------

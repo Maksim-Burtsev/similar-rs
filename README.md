@@ -73,6 +73,10 @@ Known differences:
   from stdlib's at *either* `autojunk` setting, not just `autojunk=True`.
 - `get_close_matches` can return a different set for the same reason: the
   underlying ratios differ. The tie order among equal ratios matches stdlib.
+- `find_longest_match` runs stdlib's algorithm with `autojunk=False`, so its
+  result can differ from a default stdlib matcher's (`autojunk=True`) — and it
+  may name a block that `get_matching_blocks()` of the same object (Rust
+  opcodes) does not contain.
 - Inputs must be `str` or sequences of `str`.
 - The stdlib instance attributes `b2j`, `bjunk`, `bpopular`, `opcodes` and
   `matching_blocks` are absent; the caches are private.
