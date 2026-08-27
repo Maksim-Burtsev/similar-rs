@@ -1,0 +1,12 @@
+target/
+dist/
+wheelhouse/
+__pycache__/
+*.so
+*.pyd
+.pytest_cache/
+.venv/
+.hypothesis/
+*.egg-info/
+.DS_Store
+benchmarks/corpus/

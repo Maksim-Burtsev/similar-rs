@@ -1,0 +1,49 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "similar-rs"
+requires-python = ">=3.9"
+description = "Rust-powered text diffing for Python: a fast drop-in replacement for difflib, powered by the similar crate"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Maksim Burtsev", email = "mburtsev17@gmail.com" }]
+keywords = [
+    "diff",
+    "difflib",
+    "sequencematcher",
+    "unified-diff",
+    "myers",
+    "patience",
+    "text-diff",
+    "rust",
+    "pyo3",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/Maksim-Burtsev/similar-rs"
+Issues = "https://github.com/Maksim-Burtsev/similar-rs/issues"
+
+[project.optional-dependencies]
+test = ["pytest", "hypothesis"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "similar._similar"
+features = ["pyo3/extension-module"]
