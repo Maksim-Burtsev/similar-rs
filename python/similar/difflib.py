@@ -44,6 +44,9 @@ def _calculate_ratio(matches, length):
     return 1.0
 
 
+_UNSET = object()  # so that set_seq*(None) is validated, not skipped as "unchanged"
+
+
 def _check_seq(x):
     if isinstance(x, str) or (
         isinstance(x, (list, tuple)) and all(isinstance(e, str) for e in x)
@@ -70,7 +73,7 @@ class SequenceMatcher:
                 stacklevel=2,
             )
         self._algorithm = algorithm
-        self.a = self.b = None
+        self.a = self.b = _UNSET
         self.set_seqs(a, b)
 
     def set_seqs(self, a, b):
