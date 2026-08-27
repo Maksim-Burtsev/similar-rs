@@ -1,8 +1,9 @@
 """Compatibility of `similar.difflib` with stdlib difflib."""
 
 import difflib as stdlib
+import heapq
 import re
-from collections import UserList
+from collections import Counter, UserList
 
 import pytest
 from hypothesis import given
@@ -267,6 +268,38 @@ def test_get_close_matches_tie_break_matches_stdlib():
     args = ("ab", ["ax", "ay", "az"], 2, 0.0)
     assert ours.get_close_matches(*args) == ["az", "ay"]
     assert ours.get_close_matches(*args) == stdlib.get_close_matches(*args)
+
+
+def _scored_by_brute_force(word, possibilities, n, cutoff):
+    scored = [
+        (ours.SequenceMatcher(a=cand, b=word).ratio(), cand) for cand in possibilities
+    ]
+    return [c for _, c in heapq.nlargest(n, [t for t in scored if t[0] >= cutoff])]
+
+
+@given(
+    st.text(alphabet="abcde", max_size=6),
+    st.lists(st.text(alphabet="abcde", max_size=6), max_size=8),
+    st.integers(min_value=1, max_value=4),
+    st.floats(min_value=0.0, max_value=1.0),
+)
+def test_get_close_matches_skips_only_hopeless_candidates(word, possibilities, n, cutoff):
+    # get_close_matches drops candidates by cheap upper bounds before diffing them.
+    # Scoring every candidate the slow way must give the very same answer.
+    assert ours.get_close_matches(word, possibilities, n, cutoff) == (
+        _scored_by_brute_force(word, possibilities, n, cutoff)
+    )
+
+
+@given(st.text(alphabet="abcde", max_size=12), st.text(alphabet="abcde", max_size=12))
+def test_cheap_ratio_bounds_never_undercut_the_real_ratio(a, b):
+    # The bounds those skips rest on: neither may ever fall below ratio().
+    total = len(a) + len(b)
+    if not total:
+        return
+    real = ours.SequenceMatcher(a=a, b=b).ratio()
+    assert 2.0 * min(len(a), len(b)) / total >= real
+    assert 2.0 * sum((Counter(a) & Counter(b)).values()) / total >= real
 
 
 @pytest.mark.parametrize("kw,msg", [({"n": 0}, "n must be"), ({"cutoff": 1.5}, "cutoff")])

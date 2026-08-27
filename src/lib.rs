@@ -1,6 +1,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use similar::{Algorithm, DiffTag, TextDiff};
+use std::collections::HashMap;
 
 // Algorithm is #[non_exhaustive], so match on the name instead of the enum.
 fn parse_algorithm(s: &str) -> PyResult<Algorithm> {
@@ -111,23 +112,48 @@ fn get_close_matches(
 ) -> Vec<String> {
     py.detach(|| {
         let w: Vec<char> = word.chars().collect();
+        let mut wcount: HashMap<char, isize> = HashMap::new();
+        for ch in &w {
+            *wcount.entry(*ch).or_insert(0) += 1;
+        }
         let mut scored: Vec<(f64, String)> = possibilities
             .into_iter()
             .filter_map(|cand| {
                 let c: Vec<char> = cand.chars().collect();
                 let total = w.len() + c.len();
-                let ratio = if total == 0 {
-                    1.0
-                } else {
-                    let matches: usize = similar::capture_diff_slices(Algorithm::Myers, &w, &c)
-                        .iter()
-                        .filter_map(|op| match op.as_tag_tuple() {
-                            (DiffTag::Equal, r, _) => Some(r.len()),
-                            _ => None,
-                        })
-                        .sum();
-                    2.0 * matches as f64 / total as f64
-                };
+                if total == 0 {
+                    return (1.0 >= cutoff).then_some((1.0, cand));
+                }
+                let bound = |matches: usize| 2.0 * matches as f64 / total as f64;
+                // Both are upper bounds on the real ratio, and both are far cheaper
+                // than a diff, so candidates that cannot reach the cutoff are dropped
+                // before Myers runs. Same two filters, in the same order, as difflib.
+                if bound(w.len().min(c.len())) < cutoff {
+                    return None;
+                }
+                let mut avail: HashMap<char, isize> = HashMap::new();
+                let mut common = 0usize;
+                for ch in &c {
+                    let numb = match avail.get(ch) {
+                        Some(&n) => n,
+                        None => *wcount.get(ch).unwrap_or(&0),
+                    };
+                    avail.insert(*ch, numb - 1);
+                    if numb > 0 {
+                        common += 1;
+                    }
+                }
+                if bound(common) < cutoff {
+                    return None;
+                }
+                let matches: usize = similar::capture_diff_slices(Algorithm::Myers, &w, &c)
+                    .iter()
+                    .filter_map(|op| match op.as_tag_tuple() {
+                        (DiffTag::Equal, r, _) => Some(r.len()),
+                        _ => None,
+                    })
+                    .sum();
+                let ratio = bound(matches);
                 (ratio >= cutoff).then_some((ratio, cand))
             })
             .collect();
