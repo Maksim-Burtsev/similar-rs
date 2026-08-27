@@ -199,3 +199,14 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+------------------------------------------------------------------------
+
+   NOTICE: third-party code
+
+   Portions of python/similar/difflib.py are derived from CPython's
+   difflib module (the unified_diff formatting, get_grouped_opcodes,
+   quick_ratio and real_quick_ratio), Copyright (c) 2001-2026 Python
+   Software Foundation, and are used under the PSF License Version 2:
+
+       https://docs.python.org/3/license.html
