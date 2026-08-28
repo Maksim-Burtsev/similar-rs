@@ -18,11 +18,16 @@ keywords = [
     "myers",
     "patience",
     "text-diff",
+    "text-comparison",
+    "string-similarity",
+    "fuzzy-matching",
+    "get-close-matches",
+    "diff-algorithm",
     "rust",
     "pyo3",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3",
