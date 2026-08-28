@@ -8,7 +8,7 @@ Three operations, each run both ways on every pair:
      and autojunk=False (algorithmically comparable)
   3. get_close_matches over identifiers harvested from the corpus
 
-Writes benchmarks/results.md and benchmarks/speedup.svg (overwrites in place).
+Writes benchmarks/results.md, speedup.svg and speedup-dark.svg (overwrites in place).
 
 Usage: python benchmarks/bench.py [--out DIR] [--slow-cap SECONDS]
 """
@@ -211,46 +211,56 @@ def cpu_name():
     return platform.processor() or platform.machine()
 
 
-def plot(rows, medians, out_svg: Path) -> None:
+def plot(groups, out_dir: Path) -> None:
+    """Three workload groups, each on its own linear scale: the stdlib bar is
+    always full width, ours is the honest fraction of it. Drawn twice:
+    speedup.svg (light) and speedup-dark.svg (dark)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
 
-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(10.5, 4.2), facecolor="white",
-                                 gridspec_kw={"width_ratios": [1.35, 1]})
-    rows = sorted(rows, key=lambda r: r["lines"])
-    xs = [r["lines"] for r in rows]
-    ax.plot(xs, [r["ud_std"] * 1000 for r in rows], "o", ls="-", ms=5,
-            color="#adb5bd", lw=1.8, zorder=2, label="stdlib difflib")
-    ax.plot(xs, [r["ud_ours"] * 1000 for r in rows], "o", ls="--", ms=5,
-            color="#3bA0ad", lw=1.8, zorder=3, label="similar.difflib")
-    ax.plot(xs, [r["ud_rust"] * 1000 for r in rows], "o", ls="-", ms=5.5,
-            color="#0b7285", lw=2.4, zorder=4, label="similar-rs, native")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel("lines in the larger file of the pair")
-    ax.set_ylabel("time, ms (lower is better)")
-    ax.set_title("unified_diff on real file pairs", fontsize=12, pad=10)
-    ax.legend(frameon=False, loc="upper left")
+    def fmt(ms, unit):
+        if unit:
+            return f"{ms:g} {unit}"
+        return f"{ms / 1000:g} s" if ms >= 1000 else f"{ms:g} ms"
 
-    names = [m[0] for m in medians]
-    vals = [m[1] for m in medians]
-    bars = bx.bar(range(len(vals)), vals, color="#0b7285", width=0.6, zorder=3)
-    bx.axhline(1, color="#adb5bd", lw=1.2, zorder=2)
-    bx.set_xticks(range(len(names)))
-    bx.set_xticklabels(names, fontsize=8.5)
-    bx.set_ylabel("speedup (x)")
-    bx.set_title("speedup over the corpus", fontsize=12, pad=10)
-    for b, v in zip(bars, vals):
-        bx.text(b.get_x() + b.get_width() / 2, v, f"{v:.1f}x", ha="center",
-                va="bottom", fontsize=9)
-    for a in (ax, bx):
-        a.grid(alpha=0.25, lw=0.6)
-        a.set_axisbelow(True)
-        for side in ("top", "right"):
-            a.spines[side].set_visible(False)
-        a.set_facecolor("white")
-    fig.savefig(out_svg, bbox_inches="tight", facecolor="white")
+    themes = {
+        "speedup.svg": dict(bar="#0b7285", base="#c3c9cd", surface="#ffffff",
+                            ink="#0b0b0b", muted="#52514e"),
+        "speedup-dark.svg": dict(bar="#12a3ba", base="#3a3f42", surface="#111111",
+                                 ink="#f2f2f0", muted="#a8a8a2"),
+    }
+    for name, c in themes.items():
+        fig, ax = plt.subplots(figsize=(9.5, 4.0), facecolor=c["surface"])
+        ax.set_facecolor(c["surface"])
+        ys, h = [4.7, 2.7, 0.7], 0.55
+        for (label, s_ms, o_ms, unit, note), y in zip(groups, ys):
+            # 0.016 floor keeps the sliver visible at README width
+            frac = max(o_ms / s_ms, 0.016)
+            ax.barh([y + 0.32], [1.0], color=c["base"], height=h, zorder=3)
+            ax.barh([y - 0.32], [frac], color=c["bar"], height=h, zorder=3)
+            ax.text(1.012, y + 0.32, fmt(s_ms, unit), va="center",
+                    color=c["muted"], fontsize=11)
+            ax.text(frac + 0.012, y - 0.32, fmt(o_ms, unit), va="center",
+                    color=c["ink"], fontsize=11, fontweight="bold")
+            ax.text(1.30, y - 0.32, note, va="center", ha="right",
+                    color=c["muted"] if note == "about the same" else c["bar"],
+                    fontsize=13, fontweight="bold")
+        ax.set_yticks(ys)
+        ax.set_yticklabels([g[0] for g in groups], fontsize=12.5, color=c["ink"])
+        ax.set_xticks([])
+        ax.set_xlim(0, 1.31)
+        ax.set_ylim(-0.2, 5.8)
+        for side in ("top", "right", "left", "bottom"):
+            ax.spines[side].set_visible(False)
+        ax.tick_params(length=0)
+        ax.legend(handles=[Patch(color=c["base"], label="stdlib difflib"),
+                           Patch(color=c["bar"], label="similar-rs")],
+                  frameon=False, loc="lower left", bbox_to_anchor=(0, 1.0),
+                  ncol=2, fontsize=12, labelcolor=c["ink"])
+        fig.savefig(out_dir / name, bbox_inches="tight", facecolor=c["surface"])
+        plt.close(fig)
 
 
 def fmt_ms(v):
@@ -327,11 +337,28 @@ def main() -> None:
         partial = [("ratio vs autojunk=False", med(noaj),
                     f" ({len(noaj)} of {len(rows)} {pairs}; the rest were aborted)")]
 
-    plot(rows, medians, out_dir / "speedup.svg")
+    # Chart: three workloads, mild to wild, every value measured above. The
+    # named pairs are fixed (not picked per run) so the chart stays comparable
+    # between refreshes.
+    texts = {label: (a, b) for label, a, b in corpus}
+    groups = [("Tiny input\n(a two-line diff)",
+               small[0][2], small[0][1], "us",
+               "about the same")]
+    real = next(r for r in rows if r["label"] == "argparse.py")
+    groups.append((f"Real file diff\n(argparse.py, {real['lines']:,} lines)",
+                   real["ud_std"] * 1000, real["ud_rust"] * 1000, "ms",
+                   f"{real['ud_std'] / real['ud_rust']:.0f}x faster"))
+    acc = next((r for r in rows if r["r_noaj"]), None)
+    if acc:
+        kb = round(sum(len(t) for t in texts[acc["label"]]) / 2048 / 5) * 5
+        groups.append((f"Accurate similarity of two files\n(both ~{kb} KB)",
+                       acc["r_noaj"] * 1000, acc["r_ours"] * 1000, None,
+                       f"{acc['r_noaj'] / acc['r_ours']:.0f}x faster"))
+    plot(groups, out_dir)
     medians = medians + partial
     write_report(out_dir / "results.md", rows, medians, g_ours, g_std, hits,
                  len(queries), len(cands), small, args.slow_cap)
-    print(f"wrote {out_dir}/results.md and {out_dir}/speedup.svg")
+    print(f"wrote {out_dir}/results.md, speedup.svg and speedup-dark.svg")
 
 
 def write_report(path, rows, medians, g_ours, g_std, hits, nq, nc,
@@ -451,8 +478,9 @@ def write_report(path, rows, medians, g_ours, g_std, hits, nq, nc,
         "```",
         "",
         f"The corpus is cached in `benchmarks/corpus/` (git-ignored) and downloaded "
-        f"on first run. The run overwrites `benchmarks/results.md` and "
-        f"`benchmarks/speedup.svg` in place. A stdlib `autojunk=False` run that "
+        f"on first run. The run overwrites `benchmarks/results.md`, "
+        f"`benchmarks/speedup.svg` and `benchmarks/speedup-dark.svg` in place. "
+        f"A stdlib `autojunk=False` run that "
         f"exceeds {cap:.0f} s is aborted and reported as such (`--slow-cap` changes "
         f"the limit). Numbers are from a single machine, unpinned CPU frequency; "
         f"expect the usual laptop-benchmark variance of a few percent.",
