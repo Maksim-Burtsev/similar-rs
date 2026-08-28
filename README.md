@@ -7,11 +7,17 @@
 
 Rust-powered text diffing for Python: bindings to the
 [`similar`](https://github.com/mitsuhiko/similar) crate by Armin Ronacher.
-It also ships a drop-in replacement for the standard library's `difflib`,
-which runs [2 to 4 times
-faster](https://github.com/Maksim-Burtsev/similar-rs#benchmarks) on real
-file diffs and adds
-six diff algorithms stdlib does not have.
+It also ships a drop-in replacement for the standard library's `difflib`
+that runs [2-4x faster](https://github.com/Maksim-Burtsev/similar-rs#benchmarks)
+on real file diffs and ~200x on accurate whole-file similarity — on tiny
+inputs it is a wash. It also adds six diff algorithms stdlib does not have.
+
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/19d78f4/benchmarks/speedup-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/19d78f4/benchmarks/speedup.svg">
+  <img alt="Bar chart comparing stdlib difflib and similar-rs on three workloads: about the same on a tiny diff, 4x faster on a real file diff, about 200x faster on accurate whole-file similarity." src="https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/19d78f4/benchmarks/speedup.svg">
+</picture></p>
+<p align="center"><i>Real CPython sources, one Apple M4 — per-pair tables in <a href="https://github.com/Maksim-Burtsev/similar-rs/blob/master/benchmarks/results.md">benchmarks/results.md</a>.</i></p>
 
 ## Install
 
@@ -94,42 +100,47 @@ Unicode-word granularity yet. Open an issue if you need any of these.
 
 ## Benchmarks
 
-Five CPython standard-library modules, each diffed against its own release
-four versions later (v3.9.0 to v3.13.0) — real edits to real code, roughly
-1000 to 3800 lines a side:
+The same three workloads as the chart above, measured on real CPython
+sources (v3.9.0 vs v3.13.0 releases):
 
-![unified_diff timings and speedups](https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/e578f1c/benchmarks/speedup.svg)
+| workload | stdlib | similar-rs | speedup |
+|---|---|---|---|
+| two-line diff (call overhead) | 3.7 us | 2.9 us | 1.3x |
+| real file diff (`argparse.py`, 2,669 lines) | 3.7 ms | 0.9 ms | 4.0x |
+| accurate similarity of two ~35 KB files (`autojunk=False`) | 23.8 s | 120 ms | 198.1x |
 
-| operation | speedup (median of the five pairs) |
+Why the floor is a few times, not more: stdlib `difflib` is not naive — it
+hashes lines once and diffs the hashes through C-backed dicts, so a Rust
+port removes the interpreter, not the algorithm. Across five real file
+pairs the win is 1.1-4.0x, growing with how much of the file changed.
+
+Why the ceiling is ~200x: stdlib's `autojunk` heuristic trades accuracy
+for speed, and on char-level input it discards most of the alphabet. Turn
+it off for an accurate answer and stdlib exceeded a 30 s cap on four of
+the five pairs, while similar-rs stays under 0.7 s. The heuristic also has
+bad days of its own: on the difflib.py pair stdlib's default ran 712 ms
+against our 3 ms. With `autojunk` on, the two libraries price the answer
+differently — our default `ratio` is coarser than stdlib's on some inputs;
+`algorithm="raw-myers"` returns a better match set than accurate stdlib at
+a fraction of its cost.
+
+Crossing into Rust costs a fixed ~2 us per call, which only shows on
+inputs too small to contain work — that is the first row. For whole texts,
+prefer the native entry point (`similar.unified_diff`): the line splitting
+and formatting happen in Rust too.
+
+When to use it:
+
+| you are doing | what you get |
 |---|---|
-| `unified_diff`, native (`similar.unified_diff`) | 2.6x |
-| `unified_diff`, difflib-shaped (`similar.difflib.unified_diff`) | 2.2x |
-| `SequenceMatcher.ratio` vs stdlib's default (not like-for-like, see below) | 2.8x |
-| `get_close_matches` (aggregate over the query set) | 2.3x |
-
-A few honest caveats, all of them measured:
-
-- **Two to four times, not two orders of magnitude.** stdlib `difflib` is
-  pure Python but it is not naive, and the per-pair speedup ranged from 1.0x
-  to 4.0x. The win comes from the diff itself, so it grows with how much of
-  the file actually changed.
-- `ratio()` on whole files at character level is the one case where the
-  numbers are not like-for-like: stdlib's `autojunk` is a *speed* heuristic,
-  and our Myers has a cost cut-off of its own, so we return a coarser match
-  set (a lower ratio) for the lower price. Against stdlib with `autojunk=False`
-  — the algorithmically comparable setting — one pair finished in 23.4 s
-  against our 0.12 s, and the other four had to be aborted at 30 s.
-  Read that row as "different answer, different price", not as a win — the
-  `unified_diff` numbers are the ones that survive scrutiny. If you want the
-  answer rather than the speed, name a thorough algorithm: on that same pair
-  `algorithm="raw-myers"` scored 0.783 against stdlib's own 0.759 (its
-  `autojunk=False` result) and still took 0.5 s rather than 23 s.
-- On inputs too small to contain work (two lines, a pair of words) the win is
-  1.3x to 6.6x, which is the call overhead and nothing else.
+| diffs in a hot loop (services, CI, batch pipelines) | typically 2-4x for a one-line import change |
+| accurate similarity of long texts (dedup, fuzzy matching) | the 200x class: feasible where stdlib times out |
+| git-style diffs (`patience`, `histogram`) | algorithms stdlib does not have at any speed |
 
 [`benchmarks/results.md`](https://github.com/Maksim-Burtsev/similar-rs/blob/master/benchmarks/results.md)
-has the per-pair tables and the exact method; `python benchmarks/bench.py` reproduces all of it,
-including the chart. Numbers above are from one Apple M4, Python 3.13.
+has the per-pair tables and the exact method; `python benchmarks/bench.py`
+reproduces all of it, charts included. One machine, one benchmark — try it
+on yours.
 
 ## Contributing
 
