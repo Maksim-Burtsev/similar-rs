@@ -8,7 +8,7 @@ Three operations, each run both ways on every pair:
      and autojunk=False (algorithmically comparable)
   3. get_close_matches over identifiers harvested from the corpus
 
-Writes benchmarks/results.md and benchmarks/speedup.svg (overwrites in place).
+Writes benchmarks/results.md, speedup.svg and speedup-dark.svg (overwrites in place).
 
 Usage: python benchmarks/bench.py [--out DIR] [--slow-cap SECONDS]
 """
@@ -211,46 +211,48 @@ def cpu_name():
     return platform.processor() or platform.machine()
 
 
-def plot(rows, medians, out_svg: Path) -> None:
+def plot(values, out_dir: Path) -> None:
+    """One horizontal speedup chart, drawn twice: speedup.svg and speedup-dark.svg."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import FixedLocator, NullLocator
 
-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(10.5, 4.2), facecolor="white",
-                                 gridspec_kw={"width_ratios": [1.35, 1]})
-    rows = sorted(rows, key=lambda r: r["lines"])
-    xs = [r["lines"] for r in rows]
-    ax.plot(xs, [r["ud_std"] * 1000 for r in rows], "o", ls="-", ms=5,
-            color="#adb5bd", lw=1.8, zorder=2, label="stdlib difflib")
-    ax.plot(xs, [r["ud_ours"] * 1000 for r in rows], "o", ls="--", ms=5,
-            color="#3bA0ad", lw=1.8, zorder=3, label="similar.difflib")
-    ax.plot(xs, [r["ud_rust"] * 1000 for r in rows], "o", ls="-", ms=5.5,
-            color="#0b7285", lw=2.4, zorder=4, label="similar-rs, native")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel("lines in the larger file of the pair")
-    ax.set_ylabel("time, ms (lower is better)")
-    ax.set_title("unified_diff on real file pairs", fontsize=12, pad=10)
-    ax.legend(frameon=False, loc="upper left")
-
-    names = [m[0] for m in medians]
-    vals = [m[1] for m in medians]
-    bars = bx.bar(range(len(vals)), vals, color="#0b7285", width=0.6, zorder=3)
-    bx.axhline(1, color="#adb5bd", lw=1.2, zorder=2)
-    bx.set_xticks(range(len(names)))
-    bx.set_xticklabels(names, fontsize=8.5)
-    bx.set_ylabel("speedup (x)")
-    bx.set_title("speedup over the corpus", fontsize=12, pad=10)
-    for b, v in zip(bars, vals):
-        bx.text(b.get_x() + b.get_width() / 2, v, f"{v:.1f}x", ha="center",
-                va="bottom", fontsize=9)
-    for a in (ax, bx):
-        a.grid(alpha=0.25, lw=0.6)
-        a.set_axisbelow(True)
-        for side in ("top", "right"):
-            a.spines[side].set_visible(False)
-        a.set_facecolor("white")
-    fig.savefig(out_svg, bbox_inches="tight", facecolor="white")
+    labels = [v[0] for v in values][::-1]
+    vals = [v[1] for v in values][::-1]
+    themes = {
+        "speedup.svg": dict(bar="#0b7285", surface="#ffffff", ink="#0b0b0b",
+                            muted="#52514e", grid="#e1e0d9"),
+        "speedup-dark.svg": dict(bar="#12a3ba", surface="#111111", ink="#f2f2f0",
+                                 muted="#a8a8a2", grid="#2c2c2a"),
+    }
+    for name, c in themes.items():
+        fig, ax = plt.subplots(figsize=(9, 3.6), facecolor=c["surface"])
+        ax.set_facecolor(c["surface"])
+        ax.barh(range(len(vals)), vals, height=0.62, color=c["bar"], zorder=3)
+        ax.axvline(1, color=c["grid"], lw=1.2, zorder=2)
+        ax.text(1, len(vals) - 0.25, " stdlib", color=c["muted"], fontsize=9,
+                va="bottom", ha="left")
+        for i, v in enumerate(vals):
+            ax.text(v * 1.12, i, f"{v:.1f}x", color=c["ink"], fontsize=10,
+                    va="center", ha="left")
+        ax.set_xscale("log")
+        ax.set_xlim(right=max(vals) * 3.2)
+        ax.xaxis.set_major_locator(FixedLocator([1, 10, 100]))
+        ax.xaxis.set_minor_locator(NullLocator())
+        ax.set_xticklabels(["1x", "10x", "100x"])
+        ax.set_yticks(range(len(labels)))
+        ax.set_yticklabels(labels)
+        ax.tick_params(colors=c["muted"], labelsize=10, length=0)
+        for t in ax.get_yticklabels():
+            t.set_color(c["ink"])
+        ax.grid(axis="x", color=c["grid"], lw=1, zorder=1)
+        ax.set_axisbelow(True)
+        for side in ("top", "right", "left"):
+            ax.spines[side].set_visible(False)
+        ax.spines["bottom"].set_color(c["grid"])
+        fig.savefig(out_dir / name, bbox_inches="tight", facecolor=c["surface"])
+        plt.close(fig)
 
 
 def fmt_ms(v):
@@ -327,11 +329,19 @@ def main() -> None:
         partial = [("ratio vs autojunk=False", med(noaj),
                     f" ({len(noaj)} of {len(rows)} {pairs}; the rest were aborted)")]
 
-    plot(rows, medians, out_dir / "speedup.svg")
+    # Chart rows, mildest to wildest; every value is computed above from this run.
+    chart = [("two-line diff (call overhead)", small[0][2] / small[0][1]),
+             ("get_close_matches", m_gcm),
+             ("unified_diff, real file pairs (median)", m_rust),
+             ("ratio, whole files (median)", m_aj),
+             ("ratio, stdlib's worst pair", max(r["r_aj"] / r["r_ours"] for r in rows))]
+    if noaj:
+        chart.append(("accurate ratio (autojunk=False)", med(noaj)))
+    plot(chart, out_dir)
     medians = medians + partial
     write_report(out_dir / "results.md", rows, medians, g_ours, g_std, hits,
                  len(queries), len(cands), small, args.slow_cap)
-    print(f"wrote {out_dir}/results.md and {out_dir}/speedup.svg")
+    print(f"wrote {out_dir}/results.md, speedup.svg and speedup-dark.svg")
 
 
 def write_report(path, rows, medians, g_ours, g_std, hits, nq, nc,
@@ -451,8 +461,9 @@ def write_report(path, rows, medians, g_ours, g_std, hits, nq, nc,
         "```",
         "",
         f"The corpus is cached in `benchmarks/corpus/` (git-ignored) and downloaded "
-        f"on first run. The run overwrites `benchmarks/results.md` and "
-        f"`benchmarks/speedup.svg` in place. A stdlib `autojunk=False` run that "
+        f"on first run. The run overwrites `benchmarks/results.md`, "
+        f"`benchmarks/speedup.svg` and `benchmarks/speedup-dark.svg` in place. "
+        f"A stdlib `autojunk=False` run that "
         f"exceeds {cap:.0f} s is aborted and reported as such (`--slow-cap` changes "
         f"the limit). Numbers are from a single machine, unpinned CPU frequency; "
         f"expect the usual laptop-benchmark variance of a few percent.",
