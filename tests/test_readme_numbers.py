@@ -3,19 +3,12 @@
 Regenerating results.md without updating the README is the drift this catches.
 """
 import re
+import statistics
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 README = " ".join((ROOT / "README.md").read_text().split())  # unwrap prose
 RESULTS = (ROOT / "benchmarks" / "results.md").read_text()
-
-# README medians row -> the bullet it comes from in the Medians section
-MEDIAN_ROWS = {
-    "`unified_diff`, native": "unified_diff (native)",
-    "`unified_diff`, difflib-shaped": "unified_diff (similar.difflib)",
-    "`SequenceMatcher.ratio` vs stdlib's default": "ratio vs autojunk=True",
-    "`get_close_matches` (aggregate": "get_close_matches (whole query set)",
-}
 
 
 def _table(title):
@@ -29,31 +22,44 @@ def _num(cell):
     return float(cell.replace(",", "").rstrip("x").split()[0].rstrip("x"))
 
 
-def test_medians_table():
-    bullets = dict(re.findall(r"- (.+?): \*\*([\d.]+)x\*\*",
-                              RESULTS.split("## Medians")[1]))
-    for row, bullet in MEDIAN_ROWS.items():
-        m = re.search(re.escape(row) + r"[^|]*\| ([\d.]+)x \|", README)
-        assert m, f"no README medians row for {row}"
-        assert m.group(1) == bullets[bullet], (
-            f"{row}: README says {m.group(1)}x, results.md {bullets[bullet]}x")
+def _readme_speedup(row_label):
+    m = re.search(re.escape(row_label) + r"[^|]*\|[^|]*\|[^|]*\| ([\d.]+)x", README)
+    assert m, f"no README benchmark row starting with {row_label!r}"
+    return m.group(1)
 
 
-def test_per_pair_speedup_range():
-    vals = [_num(v) for r in _table("unified_diff (line level)")
-            for v in r[5].split("/")]
-    want = f"ranged from {min(vals):.1f}x to {max(vals):.1f}x"
-    assert want in README, f"README per-pair range is not {want!r}"
+def _expected():
+    """The six chart/README speedups, recomputed from results.md tables."""
+    small = _table("Small inputs")
+    ud = _table("unified_diff (line level)")
+    # the SequenceMatcher section holds two tables; keep the 6-column speedup one
+    ratio = [r for r in _table("SequenceMatcher") if len(r) == 6]
+    gcm = _table("get_close_matches")
+    native = [_num(r[5].split("/")[1]) for r in ud]
+    aj = [_num(r[4]) for r in ratio]
+    noaj = [_num(r[5]) for r in ratio if "n/a" not in r[5]]
+    return {
+        "two-line diff": _num(small[0][3]),
+        "`get_close_matches`, 20 queries": _num(gcm[0][2]),
+        "`unified_diff`, five real file pairs": statistics.median(native),
+        "`ratio`, whole files": statistics.median(aj),
+        "`ratio`, stdlib's worst pair": max(aj),
+        "accurate `ratio`": noaj[0] if len(noaj) == 1 else statistics.median(noaj),
+    }
 
 
-def test_autojunk_false_sentence():
-    row = next(r for r in _table("SequenceMatcher") if "n/a" not in r[3])
-    want = (f"one pair finished in {_num(row[3]) / 1000:.1f} s "
-            f"against our {_num(row[1]) / 1000:.2f} s")
-    assert want in README, f"README autojunk=False sentence is not {want!r}"
+def test_benchmark_table_rows():
+    for label, want in _expected().items():
+        got = _readme_speedup(label)
+        assert got == f"{want:.1f}", (
+            f"{label}: README says {got}x, results.md gives {want:.1f}x")
 
 
-def test_small_inputs_range():
-    vals = [_num(r[3]) for r in _table("Small inputs")]
-    want = f"the win is {min(vals):.1f}x to {max(vals):.1f}x"
-    assert want in README, f"README small-inputs range is not {want!r}"
+def test_intro_understates_never_overstates():
+    exp = _expected()
+    m = re.search(r"about ([\d.]+)x on real file diffs", README)
+    assert m, "intro is missing the everyday number"
+    assert float(m.group(1)) <= exp["`unified_diff`, five real file pairs"] + 1e-9
+    m = re.search(r"up to (\d+)x where stdlib trades accuracy", README)
+    assert m, "intro is missing the ceiling number"
+    assert float(m.group(1)) <= exp["accurate `ratio`"] + 1e-9

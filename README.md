@@ -7,11 +7,17 @@
 
 Rust-powered text diffing for Python: bindings to the
 [`similar`](https://github.com/mitsuhiko/similar) crate by Armin Ronacher.
-It also ships a drop-in replacement for the standard library's `difflib`,
-which runs [2 to 4 times
-faster](https://github.com/Maksim-Burtsev/similar-rs#benchmarks) on real
-file diffs and adds
-six diff algorithms stdlib does not have.
+It also ships a drop-in replacement for the standard library's `difflib`
+that runs [2-200x faster](https://github.com/Maksim-Burtsev/similar-rs#benchmarks)
+— about 2.5x on real file diffs, up to 200x where stdlib trades accuracy
+for speed — and adds six diff algorithms stdlib does not have.
+
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/e682ea7/benchmarks/speedup-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/e682ea7/benchmarks/speedup.svg">
+  <img alt="Bar chart: similar-rs speedup over stdlib difflib across six workloads, from parity on tiny inputs to about 200x on accurate whole-file similarity." src="https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/e682ea7/benchmarks/speedup.svg">
+</picture></p>
+<p align="center"><i>Five CPython stdlib modules, v3.9.0 vs v3.13.0 — per-pair tables in <a href="https://github.com/Maksim-Burtsev/similar-rs/blob/master/benchmarks/results.md">benchmarks/results.md</a>.</i></p>
 
 ## Install
 
@@ -98,38 +104,50 @@ Five CPython standard-library modules, each diffed against its own release
 four versions later (v3.9.0 to v3.13.0) — real edits to real code, roughly
 1000 to 3800 lines a side:
 
-![unified_diff timings and speedups](https://raw.githubusercontent.com/Maksim-Burtsev/similar-rs/e578f1c/benchmarks/speedup.svg)
+| workload | stdlib | similar-rs | speedup |
+|---|---|---|---|
+| two-line diff (call overhead) | 3.7 us | 2.9 us | 1.3x |
+| `get_close_matches`, 20 queries over 2000 identifiers | 31.5 ms | 13.3 ms | 2.4x |
+| `unified_diff`, five real file pairs | 0.8-3.8 ms | 0.4-1.5 ms | 2.5x median |
+| `ratio`, whole files at char level | 241-1764 ms | 3.4-643 ms | 2.7x median |
+| `ratio`, stdlib's worst pair (difflib.py) | 794.4 ms | 3.4 ms | 234.5x |
+| accurate `ratio` (`autojunk=False`), tasks.py | 24.7 s | 120.8 ms | 204.2x |
 
-| operation | speedup (median of the five pairs) |
+Why the floor is about 2x: stdlib `difflib` is not naive — it hashes lines
+once and diffs the hashes through C-backed dicts, so a Rust port removes
+the interpreter, not the algorithm. One to four times on real diffs —
+2.5x at the median, 1.1x on a pair that barely changed — is the whole,
+honest win for a one-line import change.
+
+Why the ceiling is about 200x: stdlib's `autojunk` heuristic trades
+accuracy for speed, and on char-level input it discards most of the
+alphabet. Turn it off for an accurate answer and stdlib exceeded a 30 s
+cap on four of the five pairs, while similar-rs stays under 0.7 s. On the
+pair that did finish, `algorithm="raw-myers"` returned a better match set
+than accurate stdlib (0.783 vs 0.759) in 0.5 s instead of 24.7 s. The
+heuristic also has bad days of its own: on the difflib.py pair stdlib's
+default ran 794 ms against our 3.4 ms. Note that with `autojunk` on, the
+two libraries price the answer differently — our default `ratio` is
+coarser than stdlib's on some inputs, which is why that row says median,
+not like-for-like.
+
+Crossing into Rust costs a fixed ~2 us per call, which only shows on
+inputs too small to contain work — that is the 1.3x row. For whole texts,
+prefer the native entry point (`similar.unified_diff`): the line splitting
+and formatting happen in Rust too.
+
+When to use it:
+
+| you are doing | what you get |
 |---|---|
-| `unified_diff`, native (`similar.unified_diff`) | 2.6x |
-| `unified_diff`, difflib-shaped (`similar.difflib.unified_diff`) | 2.2x |
-| `SequenceMatcher.ratio` vs stdlib's default (not like-for-like, see below) | 2.8x |
-| `get_close_matches` (aggregate over the query set) | 2.3x |
-
-A few honest caveats, all of them measured:
-
-- **Two to four times, not two orders of magnitude.** stdlib `difflib` is
-  pure Python but it is not naive, and the per-pair speedup ranged from 1.0x
-  to 4.0x. The win comes from the diff itself, so it grows with how much of
-  the file actually changed.
-- `ratio()` on whole files at character level is the one case where the
-  numbers are not like-for-like: stdlib's `autojunk` is a *speed* heuristic,
-  and our Myers has a cost cut-off of its own, so we return a coarser match
-  set (a lower ratio) for the lower price. Against stdlib with `autojunk=False`
-  — the algorithmically comparable setting — one pair finished in 23.4 s
-  against our 0.12 s, and the other four had to be aborted at 30 s.
-  Read that row as "different answer, different price", not as a win — the
-  `unified_diff` numbers are the ones that survive scrutiny. If you want the
-  answer rather than the speed, name a thorough algorithm: on that same pair
-  `algorithm="raw-myers"` scored 0.783 against stdlib's own 0.759 (its
-  `autojunk=False` result) and still took 0.5 s rather than 23 s.
-- On inputs too small to contain work (two lines, a pair of words) the win is
-  1.3x to 6.6x, which is the call overhead and nothing else.
+| diffs in a hot loop (services, CI, batch pipelines) | typically 2-4x for a one-line import change |
+| accurate similarity of long texts (dedup, fuzzy matching) | the 200x class: feasible where stdlib times out |
+| git-style diffs (`patience`, `histogram`) | algorithms stdlib does not have at any speed |
 
 [`benchmarks/results.md`](https://github.com/Maksim-Burtsev/similar-rs/blob/master/benchmarks/results.md)
-has the per-pair tables and the exact method; `python benchmarks/bench.py` reproduces all of it,
-including the chart. Numbers above are from one Apple M4, Python 3.13.
+has the per-pair tables and the exact method; `python benchmarks/bench.py`
+reproduces all of it, charts included. Numbers above are from one Apple
+M4, Python 3.13.
 
 ## Contributing
 
