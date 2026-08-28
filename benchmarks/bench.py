@@ -222,8 +222,10 @@ def plot(groups, out_dir: Path) -> None:
 
     def fmt(ms, unit):
         if unit:
-            return f"{ms:g} {unit}"
-        return f"{ms / 1000:g} s" if ms >= 1000 else f"{ms:g} ms"
+            return f"{ms:.1f} {unit}"
+        if ms >= 1000:
+            return f"{ms / 1000:.1f} s"
+        return f"{ms:.0f} ms" if ms >= 100 else f"{ms:.1f} ms"
 
     themes = {
         "speedup.svg": dict(bar="#0b7285", base="#c3c9cd", surface="#ffffff",

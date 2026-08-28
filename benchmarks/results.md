@@ -10,11 +10,11 @@ Corpus: five CPython standard-library files, each in two released versions (v3.9
 
 | pair | lines old/new | similar.difflib (ms) | native (ms) | stdlib (ms) | speedup (difflib/native) | output lines (ours/stdlib) | hunks |
 |---|---|---|---|---|---|---|---|
-| difflib.py | 2096/2056 | 0.4 | 0.5 | 0.8 | 2.3x / 1.8x | 74/74 | 4/4 |
-| argparse.py | 2575/2669 | 1.1 | 1.0 | 4.4 | 4.1x / 4.4x | 1076/1075 | 67/67 |
-| typing.py | 2147/3814 | 1.8 | 1.5 | 3.8 | 2.1x / 2.5x | 4036/4116 | 63/64 |
-| asyncio/tasks.py | 980/1118 | 1.0 | 1.0 | 1.1 | 1.0x / 1.1x | 959/974 | 30/30 |
-| dataclasses.py | 1284/1630 | 0.5 | 0.4 | 1.6 | 3.1x / 3.8x | 1431/1437 | 47/47 |
+| difflib.py | 2096/2056 | 0.3 | 0.4 | 0.8 | 2.3x / 2.1x | 74/74 | 4/4 |
+| argparse.py | 2575/2669 | 1.0 | 0.9 | 3.7 | 3.6x / 4.0x | 1076/1075 | 67/67 |
+| typing.py | 2147/3814 | 1.8 | 1.5 | 3.9 | 2.2x / 2.6x | 4036/4116 | 63/64 |
+| asyncio/tasks.py | 980/1118 | 1.1 | 1.0 | 1.1 | 1.0x / 1.1x | 959/974 | 30/30 |
+| dataclasses.py | 1284/1630 | 0.5 | 0.4 | 1.5 | 3.0x / 3.7x | 1431/1437 | 47/47 |
 
 Output sizes and hunk counts differ slightly because the two libraries pick different (equally valid) edit scripts; both diffs are non-empty and of comparable size, which is the fairness check that matters here.
 
@@ -24,11 +24,11 @@ stdlib is measured twice. `autojunk=True` is its default and is what users actua
 
 | pair | similar-rs (ms) | stdlib autojunk=True (ms) | stdlib autojunk=False (ms) | speedup vs True | speedup vs False |
 |---|---|---|---|---|---|
-| difflib.py | 3.0 | 695.9 | n/a (aborted at 30 s) | 229.2x | n/a |
-| argparse.py | 298.1 | 1,758.5 | n/a (aborted at 30 s) | 5.9x | n/a |
-| typing.py | 641.1 | 1,252.8 | n/a (aborted at 30 s) | 2.0x | n/a |
-| asyncio/tasks.py | 119.0 | 226.2 | 23,685.2 | 1.9x | 199.0x |
-| dataclasses.py | 239.6 | 669.5 | n/a (aborted at 30 s) | 2.8x | n/a |
+| difflib.py | 3.0 | 712.1 | n/a (aborted at 30 s) | 236.1x | n/a |
+| argparse.py | 294.7 | 1,748.5 | n/a (aborted at 30 s) | 5.9x | n/a |
+| typing.py | 645.7 | 1,258.5 | n/a (aborted at 30 s) | 1.9x | n/a |
+| asyncio/tasks.py | 120.2 | 225.9 | 23,807.2 | 1.9x | 198.1x |
+| dataclasses.py | 238.8 | 674.5 | n/a (aborted at 30 s) | 2.8x | n/a |
 
 The ratio *values* differ too, and not in our favour on this input:
 
@@ -48,7 +48,7 @@ The `similar` crate's default Myers implementation has its own cost cut-off for 
 
 | similar-rs (ms) | stdlib (ms) | speedup | queries with a match (ours/stdlib) |
 |---|---|---|---|
-| 12.8 | 31.0 | 2.4x | 20/20 |
+| 13.0 | 31.3 | 2.4x | 20/20 |
 
 ## Small inputs (PyO3 call overhead)
 
@@ -56,19 +56,19 @@ Per-call cost on inputs too small to contain real work, min over 5 batches of 20
 
 | case | similar-rs (us) | stdlib (us) | ratio |
 |---|---|---|---|
-| unified_diff, 2 lines | 2.9 | 3.7 | 1.29x faster |
-| SequenceMatcher.ratio, 'kitten'/'sitting' | 1.9 | 4.5 | 2.29x faster |
-| get_close_matches, 5 candidates | 2.0 | 12.9 | 6.42x faster |
+| unified_diff, 2 lines | 2.9 | 3.7 | 1.26x faster |
+| SequenceMatcher.ratio, 'kitten'/'sitting' | 1.9 | 4.5 | 2.32x faster |
+| get_close_matches, 5 candidates | 2.0 | 12.8 | 6.35x faster |
 
 The PyO3 boundary crossing shows up here undiluted: on inputs this small there is no diff work to amortize it against.
 
 ## Medians over the corpus
 
 - unified_diff (similar.difflib): **2.3x**
-- unified_diff (native): **2.5x**
+- unified_diff (native): **2.6x**
 - ratio vs autojunk=True: **2.8x**
 - get_close_matches (whole query set): **2.4x** (aggregate over the whole query set, not a median)
-- ratio vs autojunk=False: **199.0x** (1 of 5 pairs; the rest were aborted)
+- ratio vs autojunk=False: **198.1x** (1 of 5 pairs; the rest were aborted)
 
 ## Reproduce
 
