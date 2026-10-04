@@ -65,6 +65,21 @@ jobs:
           python -m pip install dist/*.whl pytest hypothesis
           python -m pytest tests
 
+      # And the newest interpreter. allow-prereleases takes the release
+      # candidate until a final version exists, then is a no-op.
+      - uses: actions/setup-python@v7
+        if: matrix.os == 'ubuntu-24.04' && matrix.arch == 'x86_64'
+        with:
+          python-version: "3.15"
+          allow-prereleases: true
+
+      - name: Install the wheel and run tests on Python 3.15
+        if: matrix.os == 'ubuntu-24.04' && matrix.arch == 'x86_64'
+        shell: bash
+        run: |
+          python -m pip install dist/*.whl pytest hypothesis
+          python -m pytest tests
+
       - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.arch }}
